@@ -2789,14 +2789,16 @@ function escapeAttr(v){ return esc(v).replace(/`/g,'&#96;'); }
 
 
 async function seedDefaultVillagesTanjungsari(){
-  if(!window.supabase || !MULTI_DESA_CONFIG.SUPABASE_URL || MULTI_DESA_CONFIG.SUPABASE_URL.startsWith("PASTE_")) return;
+  // Jalankan hanya setelah supabaseClient dibuat dan sesi autentikasi tersedia.
+  // Petugas tidak boleh melakukan insert; seed desa cukup dilakukan oleh admin.
+  if(!supabaseClient || !state.user || !isAdmin()) return;
   try{
-    const {data:existing,error:e1}=await sb.from("villages").select("name").eq("kecamatan","Tanjungsari");
-    if(e1) return;
+    const {data:existing,error:e1}=await supabaseClient.from("villages").select("name").eq("kecamatan","Tanjungsari");
+    if(e1){ console.warn("Baca master desa gagal:",e1.message); return; }
     const names=new Set((existing||[]).map(x=>String(x.name||"").trim().toLowerCase()));
     const missing=DEFAULT_VILLAGES_TANJUNGSARI.filter(v=>!names.has(v.name.toLowerCase()));
     if(!missing.length) return;
-    const {error:e2}=await sb.from("villages").insert(missing.map(v=>({
+    const {error:e2}=await supabaseClient.from("villages").insert(missing.map(v=>({
       name:v.name,kecamatan:v.kecamatan,kabupaten:v.kabupaten,provinsi:v.provinsi
     })));
     if(e2) console.warn("Seed desa gagal:",e2.message);
@@ -2804,7 +2806,6 @@ async function seedDefaultVillagesTanjungsari(){
 }
 
 async function bootMultiDesa(){
-  await seedDefaultVillagesTanjungsari();
   if(!isConfigured()){
     state.configReady=false; state.authReady=true; render(); return;
   }
@@ -2813,13 +2814,24 @@ async function bootMultiDesa(){
     const {data:{session}} = await supabaseClient.auth.getSession();
     state.user = session?.user || null;
     state.configReady=true;
-    if(state.user) await loadRemoteState();
+    if(state.user){
+      await loadRemoteState();
+      // Hanya admin yang boleh melakukan seed master desa.
+      await seedDefaultVillagesTanjungsari();
+      // Jika seed menambah desa, muat ulang daftar desa tanpa mengganggu sesi.
+      if(isAdmin()) await loadRemoteState();
+    }
     state.authReady=true;
     render();
     supabaseClient.auth.onAuthStateChange(async (_event, session)=>{
-      state.user = session?.user || null;
-      if(state.user){ await loadRemoteState(); }
-      else { state.profile=null; state.villages=[]; state.records=[]; state.petugas={}; }
+      try{
+        state.user = session?.user || null;
+        if(state.user){ await loadRemoteState(); }
+        else { state.profile=null; state.villages=[]; state.records=[]; state.petugas={}; state.authError=''; }
+      }catch(e){
+        console.error(e);
+        state.authError=e.message||String(e);
+      }
       state.authReady=true; render();
     });
   }catch(e){
@@ -2829,9 +2841,19 @@ async function bootMultiDesa(){
 
 async function loadRemoteState(){
   state.authError='';
-  const {data:profile,error:pe} = await supabaseClient.from('profiles').select('*').eq('id',state.user.id).maybeSingle();
-  if(pe) throw pe;
-  if(!profile){ state.profile=null; state.records=[]; state.villages=[]; state.authError='Akun sudah login, tetapi profil otoritas belum dibuat di database.'; return; }
+  if(!supabaseClient || !state.user?.id) throw new Error('Koneksi Supabase belum siap atau sesi login tidak tersedia.');
+
+  const userId=state.user.id;
+  const {data:profile,error:pe} = await supabaseClient.from('profiles').select('*').eq('id',userId).maybeSingle();
+  if(pe){
+    // Jangan samarkan error RLS/koneksi sebagai "profil belum dibuat".
+    throw new Error('Gagal membaca profil otoritas: '+(pe.message||String(pe)));
+  }
+  if(!profile){
+    state.profile=null; state.records=[]; state.villages=[];
+    state.authError='Profil otoritas akun belum ditemukan. Pastikan UID pada public.profiles.id sama persis dengan User UID di Authentication > Users.';
+    return;
+  }
   if(profile.active===false){ await supabaseClient.auth.signOut(); throw new Error('Akun dinonaktifkan.'); }
   state.profile=profile;
   const {data:villages,error:ve}=await supabaseClient.from('villages').select('*').order('name');

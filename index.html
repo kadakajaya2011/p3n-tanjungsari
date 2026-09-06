@@ -408,6 +408,27 @@
   .modal-box p{font-size:12.5px;color:var(--ink-soft);margin:0 0 18px 0;}
   .modal-actions{display:flex;gap:10px;justify-content:flex-end;}
 
+  .user-profile{position:relative;display:flex;align-items:center;gap:9px;padding:10px 0 12px;margin:0 20px 10px;border-bottom:1px solid rgba(239,233,216,0.14);}
+  .avatar{width:34px;height:34px;border-radius:50%;object-fit:cover;background:var(--gold-tint);color:var(--forest-dark);display:flex;align-items:center;justify-content:center;font-weight:700;font-size:12px;border:1px solid rgba(239,233,216,.35);overflow:hidden;flex-shrink:0;}
+  .avatar img{width:100%;height:100%;object-fit:cover;}
+  .profile-info{min-width:0;flex:1;}
+  .profile-name{font-size:11.5px;font-weight:700;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .profile-role{font-size:9.5px;color:#C9C2A8;margin-top:2px;}
+  .profile-menu{position:absolute;left:0;right:0;top:calc(100% + 6px);background:#fff;color:var(--ink);border:1px solid var(--line);border-radius:5px;box-shadow:var(--shadow);padding:8px;display:none;z-index:80;}
+  .profile-menu.open{display:block;}
+  .profile-menu button{all:unset;display:block;width:100%;box-sizing:border-box;padding:9px 10px;border-radius:4px;font-size:11.5px;cursor:pointer;}
+  .profile-menu button:hover{background:var(--forest-tint);}
+  .profile-trigger{all:unset;display:flex;align-items:center;gap:9px;width:100%;cursor:pointer;}
+  .avatar-upload{display:flex;align-items:center;gap:12px;margin-bottom:10px;}
+  .avatar-large{width:64px;height:64px;border-radius:50%;overflow:hidden;border:1px solid var(--line);background:var(--gold-tint);display:flex;align-items:center;justify-content:center;font-weight:700;color:var(--forest-dark);}
+  .avatar-large img{width:100%;height:100%;object-fit:cover;}
+  .password-note{font-size:11px;color:var(--ink-soft);line-height:1.5;margin-top:5px;}
+  .admin-user-row{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 0;border-bottom:1px dashed var(--line);}
+  .admin-user-row:last-child{border-bottom:none;}
+  .user-meta{min-width:0;} .user-meta strong{display:block;font-size:12.5px;} .user-meta span{display:block;font-size:10.5px;color:var(--ink-soft);margin-top:2px;}
+  .badge-admin{display:inline-flex;padding:4px 8px;border:1px solid var(--gold);border-radius:12px;font-size:9.5px;color:var(--gold);font-weight:700;}
+  .sidebar-logout{all:unset;cursor:pointer;display:block;width:100%;box-sizing:border-box;padding:9px 10px;border-radius:4px;background:rgba(165,56,46,.12);color:#F0B2AA;text-align:center;font-size:11.5px;font-weight:700;margin-top:8px;}
+  .sidebar-logout:hover{background:rgba(165,56,46,.24);}
   .toast{position:fixed;bottom:20px;right:20px;background:var(--forest-dark);color:#EFE9D8;padding:11px 18px;border-radius:4px;font-size:12.5px;box-shadow:var(--shadow);z-index:60;}
   ::-webkit-scrollbar{width:9px;}
   ::-webkit-scrollbar-thumb{background:var(--line);border-radius:5px;}
@@ -491,6 +512,13 @@ let state = {
   laporanBulan: new Date().getMonth()+1,
   laporanTahun: new Date().getFullYear(),
   loaded:false,
+  profileMenuOpen:false,
+  profileAvatar:'',
+  profileTab:'profile',
+  adminUsers:[],
+  adminUsersLoaded:false,
+  passwordTarget:null,
+  passwordMessage:'',
 };
 
 /* ===================== PENYIMPANAN LOKAL (SQLite via sql.js) ===================== */
@@ -2856,6 +2884,7 @@ async function loadRemoteState(){
   }
   if(profile.active===false){ await supabaseClient.auth.signOut(); throw new Error('Akun dinonaktifkan.'); }
   state.profile=profile;
+  loadProfileAvatar();
   const {data:villages,error:ve}=await supabaseClient.from('villages').select('*').order('name');
   if(ve) throw ve;
   state.villages=villages||[];
@@ -3014,9 +3043,23 @@ async function doLogin(){
   }catch(e){console.error(e);state.authError=e.message||String(e);render();}
 }
 async function doLogout(){await supabaseClient.auth.signOut();}
+function initials(name){return String(name||'P').trim().split(/\s+/).slice(0,2).map(x=>x[0]).join('').toUpperCase()||'P';}
+function profileAvatarHtml(size='small'){const src=state.profileAvatar||''; return src?`<span class="avatar"><img src="${escapeAttr(src)}" alt="Foto profil"></span>`:`<span class="avatar">${esc(initials(state.profile?.full_name||state.user?.email))}</span>`;}
+function toggleProfileMenu(){state.profileMenuOpen=!state.profileMenuOpen;render();}
+function openProfile(){state.profileMenuOpen=false;state.profileTab='profile';state.tab='profile';render();}
+function handleAvatarUpload(event){const file=event.target.files?.[0];event.target.value='';if(!file)return;if(!file.type.startsWith('image/')){showToast('Pilih file gambar.');return;}if(file.size>1200000){showToast('Foto terlalu besar. Maksimal 1,2 MB.');return;}const r=new FileReader();r.onload=async()=>{state.profileAvatar=String(r.result||'');try{localStorage.setItem('p3nr_profile_avatar_'+state.user.id,state.profileAvatar);}catch(e){}render();};r.readAsDataURL(file);}
+function loadProfileAvatar(){try{state.profileAvatar=localStorage.getItem('p3nr_profile_avatar_'+state.user.id)||'';}catch(e){state.profileAvatar='';}}
+function viewProfile(){
+  const p=state.profile||{}; const name=p.full_name||state.user?.email||'Pengguna';
+  return `<div class="topline"><div><h2 class="page-title">Profil Pengguna</h2><div class="page-sub">Profil akun yang sedang masuk ke P3NR.</div></div></div><hr class="rule"><div class="form-section"><h3>Profil</h3><div class="avatar-upload"><div class="avatar-large">${state.profileAvatar?`<img src="${escapeAttr(state.profileAvatar)}" alt="Foto profil">`:esc(initials(name))}</div><div><strong>${esc(name)}</strong><div class="muted">${isAdmin()?'Admin Kecamatan':'Petugas Desa '+esc(villageName(p.village_id))}</div><label class="btn btn-ghost btn-sm" style="display:inline-block;margin-top:8px;cursor:pointer">Ganti Foto <input type="file" accept="image/*" hidden onchange="handleAvatarUpload(event)"></label></div></div><div class="grid2"><div class="field"><label>Nama</label><input value="${esc(name)}" disabled></div><div class="field"><label>Email</label><input value="${esc(state.user?.email||'')}" disabled></div><div class="field"><label>Otoritas</label><input value="${isAdmin()?'Admin Kecamatan':'Petugas Desa'}" disabled></div><div class="field"><label>Wilayah</label><input value="${esc(isAdmin()?'Kecamatan Tanjungsari':villageName(p.village_id))}" disabled></div></div></div>
+  <div class="form-section"><h3>Ubah Password Saya</h3><p class="muted">Untuk keamanan, gunakan password baru minimal 8 karakter. Anda akan mengatur password akun Anda sendiri.</p><div class="grid2"><div class="field"><label>Password Baru</label><input id="my_new_password" type="password" autocomplete="new-password"></div><div class="field"><label>Ulangi Password Baru</label><input id="my_new_password2" type="password" autocomplete="new-password"></div></div><button class="btn btn-primary" onclick="changeOwnPassword()">Simpan Password</button></div>`;
+}
+async function changeOwnPassword(){const a=document.getElementById('my_new_password')?.value||'',b=document.getElementById('my_new_password2')?.value||'';if(a.length<8){showToast('Password baru minimal 8 karakter.');return;}if(a!==b){showToast('Konfirmasi password tidak sama.');return;}const {error}=await supabaseClient.auth.updateUser({password:a});if(error){showToast('Gagal mengubah password: '+error.message);return;}document.getElementById('my_new_password').value='';document.getElementById('my_new_password2').value='';showToast('Password Anda berhasil diubah.');}
 function configView(){
   return `<div class="login-shell"><div class="login-card" style="max-width:620px"><div class="eyebrow">P3NR Multi Desa</div><h1>Konfigurasi Database Online</h1><p class="muted">Sebelum di-deploy ke Netlify, isi URL project Supabase dan Anon Key pada konstanta <span class="mono">MULTI_DESA_CONFIG</span> di file HTML.</p><div class="form-section" style="margin:16px 0"><h3>Arsitektur</h3><div class="muted">Netlify = tampilan aplikasi. Supabase = login, database, dan pembatasan akses per desa menggunakan RLS.</div></div><button class="btn btn-primary" onclick="showToast('Edit MULTI_DESA_CONFIG lalu buka ulang aplikasi.')">Saya Mengerti</button></div></div>`;
 }
+
+function viewBackup(){return `<div class="topline"><div><h2 class="page-title">Ekspor / Cadangan</h2><div class="page-sub">Simpan cadangan data register dan pulihkan bila diperlukan.</div></div></div><hr class="rule"><div class="form-section"><h3>Cadangan Data</h3><p class="muted">Ekspor JSON cocok untuk pemindahan data P3NR. File SQLite (.db) tersedia untuk cadangan lokal/offline.</p><div style="display:flex;gap:10px;flex-wrap:wrap"><button class="btn btn-primary" onclick="exportData()">↓ Ekspor Database (.json)</button><button class="btn btn-ghost" onclick="document.getElementById('importFile').click()">↑ Impor Database (.json)</button><button class="btn btn-ghost" onclick="exportSqlite()">↓ Ekspor Database (.db)</button><button class="btn btn-ghost" onclick="document.getElementById('importSqliteFile').click()">↑ Impor Database (.db)</button><input type="file" id="importFile" accept="application/json" hidden onchange="handleImportFile(event)"><input type="file" id="importSqliteFile" accept=".db,application/x-sqlite3" hidden onchange="handleImportSqliteFile(event)"></div></div><div class="form-section"><h3>Status</h3><p class="muted">${state.records.length} berkas berada dalam cakupan akun ini. Data online tetap berada di Supabase dan dibatasi oleh RLS.</p></div>`;}
 
 function render(){
   document.querySelectorAll('.modal-overlay').forEach(el=>el.remove());
@@ -3026,7 +3069,7 @@ function render(){
   if(!state.profile){app.innerHTML=loginView();return;}
   const admin=isAdmin();
   const activeName=admin?'Admin Kecamatan':(villageName(currentVillageId())||'Desa');
-  app.innerHTML=`<div class="sidebar"><div class="brand"><div class="eyebrow">Buku Register</div><h1>P3NR</h1><div class="wil">${esc(state.profile.full_name||state.user.email)} &middot; ${esc(activeName)}</div></div><nav>${navBtn('dashboard','I','Dasbor')}${navBtn('register','II','Register Nikah')}${navBtn('form','III','Formulir Baru')}${navBtn('laporan','IV','Laporan')}${admin?navBtn('admin','V','Master Desa'):''}${navBtn('settings','VI','Pengaturan')}</nav><div class="sidebar-foot"><div>${admin?'OTORITAS: ADMIN KECAMATAN':'OTORITAS: PETUGAS DESA'}</div><button class="btn btn-ghost" style="margin-top:8px;width:100%" onclick="doLogout()">Keluar</button></div></div><main id="main"></main>`;
+  app.innerHTML=`<div class="sidebar"><div class="brand"><div class="eyebrow">Buku Register</div><h1>P3NR</h1><div class="wil">${esc(activeName)}</div></div><div class="user-profile"><button class="profile-trigger" onclick="toggleProfileMenu()">${profileAvatarHtml()}<span class="profile-info"><span class="profile-name">${esc(state.profile.full_name||state.user.email)}</span><span class="profile-role">${admin?'Admin Kecamatan':'Petugas Desa'}</span></span><span style="font-size:10px;color:#C9C2A8">⌄</span></button><div class="profile-menu ${state.profileMenuOpen?'open':''}"><button onclick="openProfile()">Profil &amp; Password</button><button onclick="doLogout()">Keluar</button></div></div><nav>${navBtn('dashboard','I','Dasbor')}${navBtn('register','II','Register Nikah')}${navBtn('form','III','Formulir Baru')}${navBtn('laporan','IV','Laporan')}${navBtn('settings','V','Pengaturan')}${navBtn('backup','VI','Ekspor / Cadangan')}${admin?navBtn('admin','VII','Master Desa'):''}</nav><div class="sidebar-foot"><div>${admin?'OTORITAS: ADMIN KECAMATAN':'OTORITAS: PETUGAS DESA'}</div><div style="margin-top:6px">Keluar tersedia pada menu profil.</div></div></div><main id="main"></main>`;
   const main=document.getElementById('main');
   if(state.tab==='dashboard') main.innerHTML=viewDashboard();
   else if(state.tab==='register') main.innerHTML=viewRegister();
@@ -3035,7 +3078,9 @@ function render(){
   else if(state.tab==='printform') main.innerHTML=viewPrintForm(state.records.find(r=>r.id===state.detailId),state.printFormType);
   else if(state.tab==='laporan') main.innerHTML=viewLaporan();
   else if(state.tab==='settings') main.innerHTML=viewSettings();
-  else if(state.tab==='admin') main.innerHTML=viewAdmin();
+  else if(state.tab==='backup') main.innerHTML=viewBackup();
+  else if(state.tab==='profile') main.innerHTML=viewProfile();
+  else if(state.tab==='admin'){ main.innerHTML=viewAdmin(); if(isAdmin()&&!state.adminUsersLoaded) loadAdminUsers(); }
   if(state.confirmDeleteId) renderDeleteModal();
   if(state.confirmDeleteAll) renderDeleteAllModal();
 }
@@ -3068,8 +3113,47 @@ async function editRecord(id){state.editingId=id;state.tab='form';const r=state.
 
 function viewAdmin(){
   if(!isAdmin()) return `<div class="empty-state">Akses ditolak.</div>`;
-  return `<div class="topline"><div><h2 class="page-title">Master Desa</h2><div class="page-sub">Admin Kecamatan dapat menambah desa yang menjadi cakupan aplikasi.</div></div></div><hr class="rule"><div class="form-section"><h3>Tambah Desa</h3><div class="grid3"><div class="field"><label>Nama Desa</label><input id="v_name" placeholder="Contoh: Desa Gudang"></div><div class="field"><label>Kecamatan</label><input id="v_kecamatan"></div><div class="field"><label>Kabupaten</label><input id="v_kabupaten"></div><div class="field"><label>Provinsi</label><input id="v_provinsi" value="Jawa Barat"></div><div class="field"><label>Kode Desa</label><input id="v_kode"></div></div><button class="btn btn-primary" onclick="addVillage()">Simpan Desa</button></div><div class="form-section"><h3>Daftar Desa</h3>${state.villages.length?`<div class="data-list">${state.villages.map(v=>`<div class="recent-row"><div><div class="nm">${esc(v.name)}</div><div class="sub">${esc(v.kecamatan||'')} ${v.kabupaten?'· '+esc(v.kabupaten):''} ${v.kode?'· Kode '+esc(v.kode):''}</div></div><span class="stamp">${state.records.filter(r=>r.village_id===v.id).length} register</span></div>`).join('')}</div>`:'<div class="empty-state">Belum ada desa.</div>'}</div><div class="form-section"><h3>Akun Petugas Desa</h3><p class="muted">Akun login dibuat di Supabase Auth. Setelah user dibuat, buat/ubah baris pada tabel <span class="mono">profiles</span> untuk menetapkan <strong>role=petugas_desa</strong> dan <strong>village_id</strong>. Dengan RLS, petugas hanya dapat membaca data desanya.</p></div>`;
+  const users=state.adminUsers||[];
+  return `<div class="topline"><div><h2 class="page-title">Master Desa</h2><div class="page-sub">Pengelolaan desa dan akun Petugas Desa oleh Admin Kecamatan.</div></div><span class="badge-admin">ADMIN KECAMATAN</span></div><hr class="rule">
+  <div class="form-section"><h3>Daftar Desa</h3>${state.villages.length?`<div class="data-list">${state.villages.map(v=>`<div class="recent-row"><div><div class="nm">${esc(v.name)}</div><div class="sub">${esc(v.kecamatan||'')} ${v.kabupaten?'· '+esc(v.kabupaten):''} ${v.kode?'· Kode '+esc(v.kode):''}</div></div><span class="stamp">${state.records.filter(r=>r.village_id===v.id).length} register</span></div>`).join('')}</div>`:'<div class="empty-state">Belum ada desa.</div>'}</div>
+  <div class="form-section"><h3>Tambah Desa</h3><div class="grid3"><div class="field"><label>Nama Desa</label><input id="v_name" placeholder="Contoh: Desa Gudang"></div><div class="field"><label>Kecamatan</label><input id="v_kecamatan" value="Tanjungsari"></div><div class="field"><label>Kabupaten</label><input id="v_kabupaten" value="Sumedang"></div><div class="field"><label>Provinsi</label><input id="v_provinsi" value="Jawa Barat"></div><div class="field"><label>Kode Desa</label><input id="v_kode"></div></div><button class="btn btn-primary" onclick="addVillage()">Simpan Desa</button></div>
+  <div class="form-section"><h3>Akun Petugas Desa &amp; Password</h3><p class="muted">Admin Kecamatan dapat mengatur ulang password akun Petugas Desa. Password lama tidak dapat dilihat. Perubahan dilakukan melalui layanan server-side yang aman.</p>${state.adminUsersLoaded?(users.length?users.map(u=>`<div class="admin-user-row"><div class="user-meta"><strong>${esc(u.full_name||'Petugas Desa')}</strong><span>${esc(villageName(u.village_id))} · ${esc(u.email||u.id)}</span></div><button class="btn btn-ghost btn-sm" onclick="openAdminPasswordModal('${escapeAttr(u.id)}','${escapeAttr(u.full_name||'Petugas Desa')}','${escapeAttr(u.email||'')}','${escapeAttr(villageName(u.village_id))}')">Ubah Password</button></div>`).join(''):`<div class="empty-state" style="padding:20px">Belum ada profil Petugas Desa.</div>`):`<button class="btn btn-primary" onclick="loadAdminUsers()">Muat Akun Petugas Desa</button>`}</div>`;
 }
+async function loadAdminUsers(){
+  if(!isAdmin()) return;
+  const {data,error}=await supabaseClient.from('profiles').select('id,full_name,role,village_id,active').eq('role','petugas_desa').order('full_name');
+  if(error){showToast('Gagal memuat akun desa: '+error.message);return;}
+  const ids=(data||[]).map(x=>x.id);
+  let emails={};
+  // Email auth.users sengaja tidak tersedia lewat client/RLS; Edge Function dapat mengembalikannya bila dikonfigurasi.
+  // Untuk daftar, gunakan nama + desa; UID tetap menjadi identitas internal.
+  state.adminUsers=(data||[]).map(x=>({...x,email:''}));
+  state.adminUsersLoaded=true; render();
+}
+async function openAdminPasswordModal(id,name,email,desa){
+  if(!isAdmin()) return;
+  state.passwordTarget={id,name,email,desa};
+  const div=document.createElement('div'); div.className='modal-overlay'; div.id='adminPasswordModal';
+  div.innerHTML=`<div class="modal-box" style="width:390px"><h4>Ubah Password Petugas Desa</h4><p>Akun: <strong>${esc(name)}</strong><br>Desa: <strong>${esc(desa)}</strong></p><div class="field"><label>Password Baru</label><input id="admin_new_password" type="password" autocomplete="new-password" placeholder="Minimal 8 karakter"></div><div class="field"><label>Ulangi Password Baru</label><input id="admin_new_password2" type="password" autocomplete="new-password" placeholder="Ketik ulang password"></div><div class="password-note">Password lama tidak ditampilkan. Admin hanya menetapkan password baru.</div><div class="modal-actions" style="margin-top:16px"><button class="btn btn-ghost" onclick="closeAdminPasswordModal()">Batal</button><button class="btn btn-primary" onclick="submitAdminPasswordReset()">Simpan Password Baru</button></div></div>`;
+  document.body.appendChild(div);
+}
+function closeAdminPasswordModal(){state.passwordTarget=null;document.getElementById('adminPasswordModal')?.remove();}
+async function submitAdminPasswordReset(){
+  if(!isAdmin()||!state.passwordTarget) return;
+  const a=document.getElementById('admin_new_password')?.value||'', b=document.getElementById('admin_new_password2')?.value||'';
+  if(a.length<8){showToast('Password baru minimal 8 karakter.');return;}
+  if(a!==b){showToast('Konfirmasi password tidak sama.');return;}
+  try{
+    const {data:{session}}=await supabaseClient.auth.getSession();
+    if(!session?.access_token) throw new Error('Sesi Admin tidak tersedia.');
+    if(!MULTI_DESA_CONFIG.ADMIN_PASSWORD_RESET_URL) throw new Error('Layanan reset password Admin belum dikonfigurasi.');
+    const res=await fetch(MULTI_DESA_CONFIG.ADMIN_PASSWORD_RESET_URL,{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+session.access_token},body:JSON.stringify({targetUserId:state.passwordTarget.id,newPassword:a})});
+    const out=await res.json().catch(()=>({}));
+    if(!res.ok) throw new Error(out.error||'Gagal mengubah password.');
+    closeAdminPasswordModal(); showToast('Password akun '+state.passwordTarget.name+' berhasil diubah.');
+  }catch(e){showToast(e.message||'Gagal mengubah password.');}
+}
+
 async function addVillage(){
   const name=document.getElementById('v_name').value.trim(); if(!name){showToast('Nama desa wajib diisi.');return;}
   const row={name,kecamatan:document.getElementById('v_kecamatan').value.trim(),kabupaten:document.getElementById('v_kabupaten').value.trim(),provinsi:document.getElementById('v_provinsi').value.trim(),kode:document.getElementById('v_kode').value.trim(),created_by:state.user.id};

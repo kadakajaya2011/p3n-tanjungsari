@@ -3004,7 +3004,7 @@ function render(){
   if(!state.profile){app.innerHTML=loginView();return;}
   const admin=isAdmin();
   const activeName=admin?'Admin Kecamatan':(villageName(currentVillageId())||'Desa');
-  app.innerHTML=`<div class="sidebar"><div class="brand"><div class="eyebrow">Buku Register</div><h1>P3NR</h1><div class="wil">${esc(state.profile.full_name||state.user.email)} &middot; ${esc(activeName)}</div></div><nav>${navBtn('dashboard','I','Dasbor')}${navBtn('register','II','Register Nikah')}${navBtn('form','III','Formulir Baru')}${navBtn('laporan','IV','Laporan')}${admin?navBtn('admin','A','Master Desa'):''}${navBtn('settings','V','Pengaturan')}</nav><div class="sidebar-foot"><div>${admin?'OTORITAS: ADMIN KECAMATAN':'OTORITAS: PETUGAS DESA'}</div><button class="btn btn-ghost" style="margin-top:8px;width:100%" onclick="doLogout()">Keluar</button></div></div><main id="main"></main>`;
+  app.innerHTML=`<div class="sidebar"><div class="brand"><div class="eyebrow">Buku Register</div><h1>P3NR</h1><div class="wil">${esc(state.profile.full_name||state.user.email)} &middot; ${esc(activeName)}</div></div><nav>${navBtn('dashboard','I','Dasbor')}${navBtn('register','II','Register Nikah')}${navBtn('form','III','Formulir Baru')}${navBtn('laporan','IV','Laporan')}${admin?navBtn('admin','V','Master Desa'):''}${navBtn('settings','VI','Pengaturan')}</nav><div class="sidebar-foot"><div>${admin?'OTORITAS: ADMIN KECAMATAN':'OTORITAS: PETUGAS DESA'}</div><button class="btn btn-ghost" style="margin-top:8px;width:100%" onclick="doLogout()">Keluar</button></div></div><main id="main"></main>`;
   const main=document.getElementById('main');
   if(state.tab==='dashboard') main.innerHTML=viewDashboard();
   else if(state.tab==='register') main.innerHTML=viewRegister();

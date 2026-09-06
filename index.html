@@ -3150,8 +3150,10 @@ async function submitAdminPasswordReset(){
     if(!MULTI_DESA_CONFIG.ADMIN_PASSWORD_RESET_URL) throw new Error('Layanan reset password Admin belum dikonfigurasi.');
     const res=await fetch(MULTI_DESA_CONFIG.ADMIN_PASSWORD_RESET_URL,{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+session.access_token},body:JSON.stringify({targetUserId:state.passwordTarget.id,newPassword:a})});
     const out=await res.json().catch(()=>({}));
-    if(!res.ok) throw new Error(out.error||'Gagal mengubah password.');
-    closeAdminPasswordModal(); showToast('Password akun '+state.passwordTarget.name+' berhasil diubah.');
+	if(!res.ok) throw new Error(out.error||'Gagal mengubah password.');
+	const targetName = state.passwordTarget.name;
+	closeAdminPasswordModal();
+	showToast('Password akun '+targetName+' berhasil diubah.');
   }catch(e){showToast(e.message||'Gagal mengubah password.');}
 }
 

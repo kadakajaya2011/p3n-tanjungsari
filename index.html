@@ -649,22 +649,6 @@ async function loadState(){
 
   render();
 }
-async function persistRecords(){
-  try{
-    sqliteDb.run("DELETE FROM records");
-    const ins = sqliteDb.prepare("INSERT INTO records (id, nomor, tanggalDaftar, data) VALUES (?, ?, ?, ?)");
-    state.records.forEach(r=> ins.run([r.id||'', r.nomor||'', r.tanggalDaftar||'', JSON.stringify(r)]));
-    ins.free();
-    await persistDatabaseToIndexedDB();
-  }catch(e){ showToast("Gagal menyimpan data."); }
-}
-async function persistPetugas(){
-  try{
-    sqliteDb.run("INSERT OR REPLACE INTO settings (key, value) VALUES ('petugas', ?)", [JSON.stringify(state.petugas)]);
-    await persistDatabaseToIndexedDB();
-  }catch(e){ showToast("Gagal menyimpan pengaturan."); }
-}
-
 function showToast(msg){
   const t = document.createElement('div');
   t.className='toast'; t.textContent=msg;
@@ -1331,10 +1315,23 @@ async function saveDraft(id, isEdit){
   rec.catatan = document.getElementById('f_catatan').value.trim();
   BERKAS_ITEMS.forEach(([k])=>{ rec.berkas[k] = document.getElementById(`f_berkas_${k}`).checked; });
 
+  rec.village_id = rec.village_id || (isAdmin() ? state.adminVillageFilter : currentVillageId());
+  if(!rec.village_id || rec.village_id==='SEMUA'){
+    showToast('Desa register belum dipilih.');
+    return;
+  }
+  rec.created_by = rec.created_by || state.user?.id || '';
   const idx = state.records.findIndex(r=>r.id===id);
   if(idx>=0) state.records[idx]=rec; else state.records.push(rec);
-  await persistRecords();
-  showToast(isEdit? "Perubahan disimpan." : "Berkas baru disimpan.");
+  try{
+    await remoteSaveRecord(rec);
+  }catch(e){
+    console.error('Gagal menyimpan register:',e);
+    showToast('Gagal menyimpan ke Supabase: '+(e.message||String(e)));
+    render();
+    return;
+  }
+  showToast(isEdit? 'Perubahan tersimpan di Supabase.' : 'Berkas baru tersimpan di Supabase.');
   state.editingId=null; state.detailId=rec.id; state.tab='detail';
   render();
 }
@@ -2852,16 +2849,28 @@ async function bootMultiDesa(){
     }
     state.authReady=true;
     render();
-    supabaseClient.auth.onAuthStateChange(async (_event, session)=>{
-      try{
-        state.user = session?.user || null;
-        if(state.user){ await loadRemoteState(); }
-        else { state.profile=null; state.villages=[]; state.records=[]; state.petugas={}; state.authError=''; }
-      }catch(e){
-        console.error(e);
-        state.authError=e.message||String(e);
+    let authLoadSeq = 0;
+    supabaseClient.auth.onAuthStateChange((_event, session)=>{
+      const event = _event;
+      state.user = session?.user || null;
+      if(!state.user){
+        state.profile=null; state.villages=[]; state.records=[]; state.petugas={}; state.authError='';
+        state.authReady=true; render();
+        return;
       }
-      state.authReady=true; render();
+      // Jangan memuat ulang data pada TOKEN_REFRESHED. Event ini bisa terjadi berkali-kali
+      // dan sebelumnya berpotensi menimpa state setelah proses simpan selesai.
+      if(['SIGNED_IN','INITIAL_SESSION','USER_UPDATED'].includes(event)){
+        const seq=++authLoadSeq;
+        Promise.resolve().then(async()=>{
+          await loadRemoteState();
+          if(seq!==authLoadSeq) return;
+          state.authReady=true; render();
+        }).catch(e=>{
+          if(seq!==authLoadSeq) return;
+          console.error(e); state.authError=e.message||String(e); state.authReady=true; render();
+        });
+      }
     });
   }catch(e){
     console.error(e); state.authError=e.message||String(e); state.authReady=true; render();
@@ -2896,8 +2905,12 @@ async function loadRemoteState(){
   (settings||[]).forEach(x=>state.villageSettingsMap[x.village_id]=x.data||{});
   const query=supabaseClient.from('registers').select('*').order('tanggal_daftar',{ascending:false});
   const {data:rows,error:re}=await (isAdmin()?query:query.eq('village_id',currentVillageId()));
-  if(re) throw re;
-  state.records=(rows||[]).map(x=>({...(x.data||{}),id:x.id,nomor:x.nomor,tanggalDaftar:x.tanggal_daftar,village_id:x.village_id,created_by:x.created_by,updated_at:x.updated_at}));
+  if(re) throw new Error('Gagal membaca data register: '+(re.message||String(re)));
+  const mappedRows=(rows||[]).map(x=>({...(x.data||{}),id:x.id,nomor:x.nomor,tanggalDaftar:x.tanggal_daftar,village_id:x.village_id,created_by:x.created_by,updated_at:x.updated_at}));
+  // Hanya mengganti cache setelah query berhasil. Ini mencegah kegagalan jaringan/RLS
+  // menghapus data yang sedang tampil di layar. Jika query sukses dan memang kosong,
+  // kosong adalah kondisi database yang sebenarnya.
+  state.records=mappedRows;
   const sid=isAdmin()?state.adminVillageFilter:currentVillageId();
   state.petugas = {...defaultPetugas(), ...(sid!=='SEMUA'?settingsForVillage(sid):{})};
 }
@@ -2911,14 +2924,27 @@ function recordsVisible(){
 }
 
 async function remoteSaveRecord(rec){
-  const payload={id:rec.id,village_id:rec.village_id,nomor:rec.nomor,tanggal_daftar:rec.tanggalDaftar,data:rec,updated_by:state.user.id};
+  if(!supabaseClient || !state.user?.id) throw new Error('Sesi login Supabase tidak tersedia.');
+  const villageId = rec.village_id || currentVillageId();
+  if(!villageId || villageId==='SEMUA') throw new Error('Desa register belum ditentukan.');
+  const normalized = {...rec, village_id:villageId};
+  const payload={
+    id:normalized.id,
+    village_id:villageId,
+    nomor:normalized.nomor || '',
+    tanggal_daftar:normalized.tanggalDaftar || null,
+    data:normalized,
+    created_by:normalized.created_by || state.user.id,
+    updated_by:state.user.id
+  };
   const {error}=await supabaseClient.from('registers').upsert(payload,{onConflict:'id'});
   if(error) throw error;
+  return normalized;
 }
-async function persistRecords(){
-  if(!supabaseClient||!state.user) return;
-  // Upsert seluruh cache saat ada perubahan. RLS tetap menjadi pengaman utama.
-  for(const r of state.records){
+async function persistRecords(recordsToSave=null){
+  if(!supabaseClient||!state.user) throw new Error('Sesi login Supabase tidak tersedia.');
+  const list = Array.isArray(recordsToSave) ? recordsToSave : state.records;
+  for(const r of list){
     if(!r.village_id) r.village_id=currentVillageId();
     await remoteSaveRecord(r);
   }

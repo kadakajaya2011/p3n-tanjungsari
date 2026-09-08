@@ -2044,7 +2044,7 @@ function formBody(rec, type){
         <p class="wali-intro">Yang bertanda tangan dibawah ini :</p>
         <table class="wali-fields">
           <tr><td class="num">1</td><td class="label">Nama</td><td class="sep">:</td><td class="value">${esc(pemberi)||'........................................................'}</td></tr>
-          <tr><td class="num">2</td><td class="label">Bin</td><td class="sep">:</td><td>${'........................................................'}</td></tr>
+          <tr><td class="num">2</td><td class="label">Bin</td><td class="sep">:</td><td>${esc(p.bin)||'........................................................'}</td></tr>
           <tr><td class="num">3</td><td class="label">Nomor Induk Kependudukan (NIK)</td><td class="sep">:</td><td>${esc(p.nik)||'........................................................'}</td></tr>
           <tr><td class="num">4</td><td class="label">Tempat dan tanggal lahir</td><td class="sep">:</td><td>${esc(p.ttl)||'........................................................'}</td></tr>
           <tr><td class="num">5</td><td class="label">Kewarganegaraan</td><td class="sep">:</td><td>${esc(p.kewarganegaraan||'Indonesia')}</td></tr>

@@ -2530,13 +2530,14 @@ function laporanListingTable(rows){
   if(rows.length===0) return `<div class="empty-state" style="padding:26px 0;">Tidak ada pendaftar pada periode ini.</div>`;
   return `
     <table class="print-listing">
-      <thead><tr><th>No</th><th>Nomor Register</th><th>Tgl. Daftar</th><th>Jenis</th><th>Calon Suami</th><th>Calon Istri</th><th>Tgl. Akad</th><th>Status</th></tr></thead>
+      <thead><tr><th>No</th><th>Nomor Register</th><th>Tgl. Daftar</th>${isAdmin()?'<th>Desa</th>':''}<th>Jenis</th><th>Calon Suami</th><th>Calon Istri</th><th>Tgl. Akad</th><th>Status</th></tr></thead>
       <tbody>
         ${rows.map((r,i)=>`
           <tr>
             <td>${i+1}</td>
             <td class="nomor">${esc(r.nomor)}</td>
             <td>${fmtDate(r.tanggalDaftar)}</td>
+            ${isAdmin()?`<td><strong>${esc(villageName(r.village_id))}</strong></td>`:''}
             <td>${jenisRegisterStamp(r)}</td>
             <td>${esc(r.suami.nama)||'-'}</td>
             <td>${esc(r.istri.nama)||'-'}</td>
@@ -2556,7 +2557,7 @@ function laporanRinciBlock(rows){
     return `
       <div class="rinci-entry">
         <div class="rinci-head">
-          <div><span class="rinci-num">${i+1}.</span> <strong>${esc(r.suami.nama)||'-'}</strong> &amp; <strong>${esc(r.istri.nama)||'-'}</strong></div>
+          <div><span class="rinci-num">${i+1}.</span> <strong>${esc(r.suami.nama)||'-'}</strong> &amp; <strong>${esc(r.istri.nama)||'-'}</strong>${isAdmin()?` <span class="stamp" style="margin-left:8px;">Desa: ${esc(villageName(r.village_id))}</span>`:''}</div>
           <div style="display:flex;gap:10px;align-items:center;">
             <span class="nomor">${esc(r.nomor)}</span>
             ${jenisRegisterStamp(r)}
@@ -2610,6 +2611,14 @@ function laporanJenisSummary(rows){
   return `<div class="doc-grid" style="grid-template-columns:1fr 1fr; margin:12px 0 16px;"><div class="stat-card"><div class="num">${c.keluar}</div><div class="lbl">Register Keluar</div></div><div class="stat-card"><div class="num">${c.masuk}</div><div class="lbl">Register Masuk</div></div></div>`;
 }
 
+function laporanDesaSummary(rows){
+  const map={};
+  rows.forEach(r=>{const d=villageName(r.village_id)||'Desa Tidak Diketahui'; if(!map[d]) map[d]={total:0,keluar:0,masuk:0}; map[d].total++; const j=getJenisRegister(r); if(j==='KELUAR') map[d].keluar++; if(j==='MASUK') map[d].masuk++;});
+  const entries=Object.entries(map).sort((a,b)=>a[0].localeCompare(b[0]));
+  if(!entries.length) return '';
+  return `<div class="doc-box" style="margin:12px 0 16px;"><h4>Rekap Berdasarkan Desa</h4><table class="print-listing"><thead><tr><th>No</th><th>Desa</th><th>Total</th><th>Register Keluar</th><th>Register Masuk</th></tr></thead><tbody>${entries.map(([d,c],i)=>`<tr><td>${i+1}</td><td><strong>${esc(d)}</strong></td><td>${c.total}</td><td>${c.keluar}</td><td>${c.masuk}</td></tr>`).join('')}</tbody></table></div>`;
+}
+
 function viewLaporan(){
   const mode = state.laporanMode;
   const y = state.laporanTahun, m = state.laporanBulan;
@@ -2653,6 +2662,7 @@ function viewLaporan(){
           <div class="stat-card"><div class="num">${rows.length}</div><div class="lbl">Total Pendaftar</div></div>
           ${STATUSES.map(s=>`<div class="stat-card"><div class="num">${counts[s]}</div><div class="lbl">${s}</div></div>`).join('')}
         </div>
+        ${isAdmin()?laporanDesaSummary(rows):''}
         ${laporanJenisSummary(rows)}
         ${state.laporanTampilan==='rinci' ? laporanRinciBlock(rows) : laporanListingTable(rows)}
         <p style="font-size:12px;text-align:right;margin-top:28px;">${esc(state.petugas.wilayah)||'…………………'}, ${fmtDate(new Date().toISOString().slice(0,10))}</p>

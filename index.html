@@ -3076,11 +3076,10 @@ function loginView(){
           <div class="authority-option"><input id="login_role_desa" name="login_role" type="radio" value="petugas_desa" onchange="updateLoginAuthority()"><label for="login_role_desa"><span class="authority-title">Petugas Desa</span><span class="authority-desc">Akses terbatas pada desa yang ditugaskan.</span></label></div>
         </div>
         <div id="login_authority_info" class="authority-info"><span class="ai-icon">i</span><div><b>Admin Kecamatan</b><br>Dapat melihat dan mengelola register dari seluruh 12 desa Kecamatan Tanjungsari.</div></div>
-        //<div id="login_village_preview" class="village-preview" style="display:none"><div class="vp-label">Wilayah Tugas</div><div class="vp-list">Desa akan mengikuti <strong>village_id</strong> pada profil akun setelah login berhasil.</div></div> 
         <div class="field"><label>Email</label><input id="login_email" type="email" autocomplete="username" placeholder="nama@domain.go.id" onkeydown="if(event.key==='Enter')doLogin()"></div>
         <div class="field"><label>Password</label><input id="login_password" type="password" autocomplete="current-password" placeholder="Masukkan password" onkeydown="if(event.key==='Enter')doLogin()"></div>
         <button class="login-submit" onclick="doLogin()">Masuk dengan Akun</button>
-        <div class="login-footer-note"><strong>Keamanan akses:</strong> otoritas dan pembatasan desa tetap diverifikasi melalui profil pengguna dan Supabase RLS.</div>
+        <div class="login-footer-note"><strong>Created By:</strong> &copy; 2026 Yusuf Kadakajaya. All rights reserved.</div>
       </div>
     </section>
   </div>`;

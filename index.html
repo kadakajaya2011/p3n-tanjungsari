@@ -2998,8 +2998,17 @@ function makeId(){
 function genNomor(){
   const year=new Date().getFullYear();
   const scope=isAdmin()&&state.adminVillageFilter!=='SEMUA'?state.adminVillageFilter:currentVillageId();
-  const count=state.records.filter(r=>(r.village_id||scope)===scope && (r.nomor||'').includes('/'+year)).length;
-  return `P3NR-${String(count+1).padStart(3,'0')}/${year}`;
+  const namaDesa=String(villageName(scope)||'DESA').trim().replace(/[\\/]+/g,'-').replace(/\s+/g,' ');
+  // Nomor berjalan terpisah untuk setiap desa dan setiap tahun.
+  // Menggunakan nomor terbesar agar nomor tidak terulang jika data dihapus.
+  let maxSeq=0;
+  state.records.forEach(r=>{
+    if((r.village_id||scope)!==scope) return;
+    const nomor=String(r.nomor||'');
+    const m=nomor.match(/^P3N-(?:.+)\/(\d+)\/(\d{4})$/i);
+    if(m && Number(m[2])===year) maxSeq=Math.max(maxSeq,Number(m[1]));
+  });
+  return `P3N-${namaDesa}/${String(maxSeq+1).padStart(3,'0')}/${year}`;
 }
 function blankRecord(){
   const targetVillage = isAdmin() ? (state.adminVillageFilter!=='SEMUA' ? state.adminVillageFilter : null) : currentVillageId();
